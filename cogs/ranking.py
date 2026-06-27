@@ -10,7 +10,7 @@ from .utils import (
     is_member_banned, ban_member, unban_member,
     can_rejoin_after_kick, set_kick_cooldown,
     set_leave_cooldown, get_member_divisions,
-    remove_member_from_division,
+    remove_member_from_division, send_leave_announcement,
 )
 
 
@@ -237,6 +237,7 @@ class RankingManager(commands.Cog):
             set_member_rank(member.id, division_name, None)
             remove_member_from_division(member.id, division_name)
             set_kick_cooldown(member.id, division_name)
+            await send_leave_announcement(ctx.guild, member, division_name)
 
             try:
                 await member.edit(nick=None, reason="Expulsion")
@@ -300,6 +301,8 @@ class RankingManager(commands.Cog):
                 role = ctx.guild.get_role(div_data["role_id"])
                 if role and role in member.roles:
                     await member.remove_roles(role, reason="Ban définitif")
+                    remove_member_from_division(member.id, div_name)
+                    await send_leave_announcement(ctx.guild, member, div_name)
             for role_id in (LIEUTENANT_ROLE_ID, VICE_CAPTAIN_ROLE_ID):
                 r = ctx.guild.get_role(role_id)
                 if r and r in member.roles:
@@ -400,6 +403,7 @@ class RankingManager(commands.Cog):
             set_member_rank(ctx.author.id, division_name, None)
             remove_member_from_division(ctx.author.id, division_name)
             set_leave_cooldown(ctx.author.id)
+            await send_leave_announcement(ctx.guild, ctx.author, division_name)
 
             try:
                 await ctx.author.edit(nick=None, reason="Départ de division")

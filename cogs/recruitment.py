@@ -13,7 +13,7 @@ from .utils import (
     load_json, save_json,
     get_division_by_member, count_division_members,
     is_member_banned, can_rejoin_after_kick,
-    can_rejoin_after_leave, add_member_to_division,
+    can_rejoin_after_leave, add_member_to_division, send_join_announcement,
 )
 
 
@@ -181,6 +181,8 @@ class ApplicationTicketView(View):
             if member:
                 await member.add_roles(role, reason=f"Candidature acceptée — {self.division_name}")
             add_member_to_division(self.member_id, self.division_name)
+            if member:
+                await send_join_announcement(interaction.guild, member, self.division_name)
         except discord.Forbidden:
             await interaction.followup.send("❌ Impossible d'ajouter le rôle.", ephemeral=True)
             return

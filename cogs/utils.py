@@ -27,30 +27,30 @@ DIVISIONS: dict[str, dict] = {
         "role_id": 1520173789957062787,
         "channels": {
             "main":     1520182625807892550,
-            "annonces": 1520182625807892550,
+            "annonces": 1520182716794933408,
             "entrants": 1520183224561827870,
             "sortants": 1520183267230351370,
-            "category": 1520182538852130926,
+            "category": 1520176859818754189,
         },
     },
     "Division 6": {
-        "role_id": 1520173789957062787,
+        "role_id": 1520180291061415957,
         "channels": {
             "main":     1520185465817272391,
             "annonces": 1520185555516915913,
             "entrants": 1520185587926302730,
             "sortants": 1520185614081851453,
-            "category": 1520185456181829663,
+            "category": 1520176859818754189,
         },
     },
     "Division 10": {
-        "role_id": 1520173789957062787,
+        "role_id": 1520199862216425534,
         "channels": {
             "main":     1520194245997363341,
             "annonces": 1520199186916573335,
-            "entrants": 1520199186916573335,
+            "entrants": 1520199221268058172,
             "sortants": 1520199247822065854,
-            "category": 1520193979872559267,
+            "category": 1520176859818754189,
         },
     },
     "Division 11": {
@@ -60,13 +60,13 @@ DIVISIONS: dict[str, dict] = {
             "annonces": 1520213097376256081,
             "entrants": 1520213126799425747,
             "sortants": 1520213148865663017,
-            "category": 1520212998555889664,
+            "category": 1520176859818754189,
         },
     },
 }
 
 LIEUTENANT_ROLE_ID      = 1520240253628055572
-VICE_CAPTAIN_ROLE_ID    = 1520235446712406078
+VICE_CAPTAIN_ROLE_ID    = 1520180582120820856
 DIVISION_CAPTAIN_ROLE_ID= 1520180582120820856
 
 # ──────────────────────────────────────────────
@@ -283,3 +283,67 @@ def set_cooldown_config(captain_id: int, division_name: str) -> None:
     cooldowns = load_json(COOLDOWNS_FILE)
     cooldowns[f"{captain_id}_{division_name}"] = datetime.now().isoformat()
     save_json(COOLDOWNS_FILE, cooldowns)
+
+# ──────────────────────────────────────────────
+# Welcome/Goodbye message helpers
+# ──────────────────────────────────────────────
+
+def get_welcome_message(division_name: str) -> str:
+    config = load_division_config(division_name)
+    return config.get("welcome_message", f"🎉 Bienvenue à {{member}} dans **{division_name}** !")
+
+def set_welcome_message(division_name: str, message: str) -> None:
+    config = load_division_config(division_name)
+    config["welcome_message"] = message
+    save_division_config(division_name, config)
+
+def get_goodbye_message(division_name: str) -> str:
+    config = load_division_config(division_name)
+    return config.get("goodbye_message", f"👋 {{member}} a quitté **{division_name}**.")
+
+def set_goodbye_message(division_name: str, message: str) -> None:
+    config = load_division_config(division_name)
+    config["goodbye_message"] = message
+    save_division_config(division_name, config)
+
+# ──────────────────────────────────────────────
+# Announcement senders (for join/leave)
+# ──────────────────────────────────────────────
+
+async def send_join_announcement(guild: discord.Guild, member: discord.Member, division_name: str) -> None:
+    """Envoie un message de bienvenue dans le salon 'entrants' de la division."""
+    data = DIVISIONS.get(division_name)
+    if not data:
+        return
+    channel = guild.get_channel(data["channels"]["entrants"])
+    if not channel:
+        return
+    embed = discord.Embed(
+        title="🎉 Nouveau membre",
+        description=f"Bienvenue à {member.mention} dans **{division_name}** !",
+        color=discord.Color.green(),
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    try:
+        await channel.send(embed=embed)
+    except discord.Forbidden:
+        pass
+
+async def send_leave_announcement(guild: discord.Guild, member: discord.Member, division_name: str) -> None:
+    """Envoie un message d'au revoir dans le salon 'sortants' de la division."""
+    data = DIVISIONS.get(division_name)
+    if not data:
+        return
+    channel = guild.get_channel(data["channels"]["sortants"])
+    if not channel:
+        return
+    embed = discord.Embed(
+        title="👋 Membre parti",
+        description=f"{member.mention} a quitté **{division_name}**.",
+        color=discord.Color.red(),
+    )
+    embed.set_thumbnail(url=member.display_avatar.url)
+    try:
+        await channel.send(embed=embed)
+    except discord.Forbidden:
+        pass

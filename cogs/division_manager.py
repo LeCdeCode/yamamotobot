@@ -8,7 +8,7 @@ from .utils import (
     get_division_by_member, get_division_number,
     is_member_blocked, block_member_from_division,
     unblock_member_from_division, get_blocked_divisions,
-    add_member_to_division,
+    add_member_to_division, send_join_announcement, send_leave_announcement,
 )
 
 
@@ -134,19 +134,16 @@ class DivisionManager(commands.Cog):
         self.active_invitations.pop(captain_id, None)
 
     async def send_join_announcement(self, member: discord.Member, division_name: str) -> None:
-        data = DIVISIONS.get(division_name)
-        if not data:
+        """Envoie un message de bienvenue dans le salon 'entrants' de la division."""
+        if not member.guild:
             return
-        channel = member.guild.get_channel(data["channels"]["main"])
-        if not channel:
+        await send_join_announcement(member.guild, member, division_name)
+
+    async def send_leave_announcement(self, member: discord.Member, division_name: str) -> None:
+        """Envoie un message d'au revoir dans le salon 'sortants' de la division."""
+        if not member.guild:
             return
-        embed = discord.Embed(
-            title="🎉 Nouveau membre",
-            description=f"Bienvenue à {member.mention} dans **{division_name}** !",
-            color=discord.Color.green(),
-        )
-        embed.set_thumbnail(url=member.display_avatar.url)
-        await channel.send(embed=embed)
+        await send_leave_announcement(member.guild, member, division_name)
 
     @commands.command(name="inviter")
     async def inviter(self, ctx: commands.Context, member: discord.Member) -> None:
