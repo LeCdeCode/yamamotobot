@@ -65,14 +65,20 @@ def _profile_embed(target: discord.Member, profile: dict) -> discord.Embed:
     embed.add_field(name="🏷️ Division", value=division_name, inline=True)
 
     grade = "Membre"
+    grade_role: Optional[discord.Role] = None
     if member_division:
         if any(role.id == DIVISION_CAPTAIN_ROLE_ID for role in target.roles):
             grade = "Capitaine"
+            grade_role = target.guild.get_role(DIVISION_CAPTAIN_ROLE_ID)
         elif any(role.id == VICE_CAPTAIN_ROLE_ID for role in target.roles):
             grade = "Vice-capitaine"
+            grade_role = target.guild.get_role(VICE_CAPTAIN_ROLE_ID)
         elif any(role.id == LIEUTENANT_ROLE_ID for role in target.roles):
             grade = "Lieutenant"
+            grade_role = target.guild.get_role(LIEUTENANT_ROLE_ID)
     embed.add_field(name="🎖️ Grade", value=grade, inline=True)
+    if grade_role:
+        embed.add_field(name="🔰 Role", value=grade_role.mention, inline=True)
 
     if rank:
         embed.add_field(name="⚔️ Rang", value=rank, inline=True)
