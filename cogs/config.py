@@ -206,6 +206,7 @@ class ConfigSession:
             "banner_url":   None,
             "role_color":   None,
         }
+        self.original_config: dict = dict(self.config)
         self.embed_message: Optional[discord.Message] = None
         self._waiting = True
 
@@ -337,8 +338,44 @@ class ConfigSession:
 
     async def confirm(self) -> None:
         self._waiting = False
+
+        changed_sensitive = [
+            key for key in SENSITIVE_CONFIG_KEYS
+            if self.original_config.get(key) != self.config.get(key)
+        ]
+        cooldown_until = None
+        if changed_sensitive:
+            cooldown_until = check_cooldown_config(self.captain.id, self.division_name, COOLDOWN_DAYS)
+
+        if changed_sensitive and cooldown_until:
+            remaining = cooldown_until - datetime.now()
+            hours = int(remaining.total_seconds() // 3600)
+            minutes = int((remaining.total_seconds() % 3600) // 60)
+            skipped = ", ".join(changed_sensitive)
+            for key in changed_sensitive:
+                self.config[key] = self.original_config.get(key)
+            save_division_config(self.division_name, self.config)
+
+            embed = discord.Embed(
+                title="⏳ Cooldown actif",
+                description=(
+                    f"Les modifications sensibles suivantes n'ont pas été appliquées car tu dois attendre encore "
+                    f"**{hours}h {minutes}m** : {skipped}.\n\n"
+                    "Les autres modifications ont bien été enregistrées."
+                ),
+                color=discord.Color.orange(),
+            )
+            if self.embed_message:
+                try:
+                    await self.embed_message.edit(embed=embed, view=None)
+                except discord.HTTPException:
+                    pass
+            self.cog.end_session(self.captain.id)
+            return
+
         save_division_config(self.division_name, self.config)
-        set_cooldown_config(self.captain.id, self.division_name)
+        if changed_sensitive:
+            set_cooldown_config(self.captain.id, self.division_name)
 
         # Appliquer la couleur au rôle si possible
         if self.config.get("role_color"):
@@ -352,12 +389,15 @@ class ConfigSession:
                     except (discord.Forbidden, ValueError):
                         pass
 
+        description = f"La configuration de **{self.division_name}** a été mise à jour avec succès !"
+        if changed_sensitive:
+            description += f"\n⏱️ Prochaine modification sensible possible dans {COOLDOWN_DAYS} jours."
+        else:
+            description += "\n✅ Les réglages non-sensibles peuvent être modifiés à tout moment."
+
         embed = discord.Embed(
             title="✅ Configuration sauvegardée",
-            description=(
-                f"La configuration de **{self.division_name}** a été mise à jour avec succès !\n"
-                f"⏱️ Prochaine modification possible dans {COOLDOWN_DAYS} jours."
-            ),
+            description=description,
             color=discord.Color.green(),
         )
         if self.embed_message:
@@ -420,17 +460,6 @@ class ConfigManager(commands.Cog):
             return
 
         division_name, _ = captain_division
-
-        cooldown_until = check_cooldown_config(ctx.author.id, division_name, COOLDOWN_DAYS)
-        if cooldown_until:
-            remaining = cooldown_until - datetime.now()
-            hours = int(remaining.total_seconds() // 3600)
-            minutes = int((remaining.total_seconds() % 3600) // 60)
-            await ctx.reply(
-                f"⏳ Tu pourras modifier la config dans **{hours}h {minutes}m**.",
-                delete_after=8,
-            )
-            return
 
         if ctx.author.id in self._sessions:
             await ctx.reply("⚠️ Tu as déjà une session de configuration en cours.", delete_after=5)
