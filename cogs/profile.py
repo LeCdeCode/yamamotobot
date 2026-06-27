@@ -13,8 +13,8 @@ from discord.ui import View, Button
 
 from .utils import (
     DIVISIONS, PROFILES_FILE, DIVISION_CAPTAIN_ROLE_ID,
-    load_json, save_json,
-    get_division_by_member, get_member_rank, get_member_join_date,
+    load_json, save_json, MEMBERS_FILE,
+    get_division_by_member, get_member_rank, get_member_join_date, get_rank_holder,
     count_division_members,
 )
 
@@ -88,8 +88,35 @@ class ProfileEditView(View):
         super().__init__(timeout=300)
         self.cog = cog
         self.member = member
+    @discord.ui.button(label="🖼️ Changer PP", style=discord.ButtonStyle.primary, row=0)
+    async def edit_pp_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self.member.id:
+            await interaction.response.send_message("❌ C'est pas ton profil.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        embed = discord.Embed(
+            title="🖼️ Changer l'image de profil",
+            description="Envoie un lien d'image/GIF ou attache directement une image.\nEnvoie `none` pour supprimer. Tu as 2 minutes.",
+            color=discord.Color.blurple(),
+        )
+        prompt = await interaction.channel.send(embed=embed)
+        self.cog.start_edit_session(self.member.id, "profile_picture", interaction.channel.id, prompt)
 
-    @discord.ui.button(label="✏️ Changer bio/couleur", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="🏳️ Changer bannière", style=discord.ButtonStyle.primary, row=0)
+    async def edit_banner_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self.member.id:
+            await interaction.response.send_message("❌ C'est pas ton profil.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        embed = discord.Embed(
+            title="🏳️ Changer la bannière",
+            description="Envoie un lien d'image/GIF ou attache directement une image.\nEnvoie `none` pour supprimer. Tu as 2 minutes.",
+            color=discord.Color.blurple(),
+        )
+        prompt = await interaction.channel.send(embed=embed)
+        self.cog.start_edit_session(self.member.id, "banner", interaction.channel.id, prompt)
+
+    @discord.ui.button(label="✏️ Changer bio/couleur", style=discord.ButtonStyle.primary, row=1)
     async def edit_bio_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if interaction.user.id != self.member.id:
             await interaction.response.send_message("❌ C'est pas ton profil.", ephemeral=True)
@@ -107,36 +134,7 @@ class ProfileEditView(View):
         )
         prompt = await interaction.channel.send(embed=embed)
         self.cog.start_edit_session(self.member.id, "bio_color", interaction.channel.id, prompt)
-
-    @discord.ui.button(label="🖼️ Changer PP", style=discord.ButtonStyle.primary)
-    async def edit_pp_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if interaction.user.id != self.member.id:
-            await interaction.response.send_message("❌ C'est pas ton profil.", ephemeral=True)
-            return
-        await interaction.response.defer()
-        embed = discord.Embed(
-            title="🖼️ Changer l'image de profil",
-            description="Envoie un lien d'image/GIF ou attache directement une image.\nEnvoie `none` pour supprimer. Tu as 2 minutes.",
-            color=discord.Color.blurple(),
-        )
-        prompt = await interaction.channel.send(embed=embed)
-        self.cog.start_edit_session(self.member.id, "profile_picture", interaction.channel.id, prompt)
-
-    @discord.ui.button(label="🏳️ Changer bannière", style=discord.ButtonStyle.primary)
-    async def edit_banner_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if interaction.user.id != self.member.id:
-            await interaction.response.send_message("❌ C'est pas ton profil.", ephemeral=True)
-            return
-        await interaction.response.defer()
-        embed = discord.Embed(
-            title="🏳️ Changer la bannière",
-            description="Envoie un lien d'image/GIF ou attache directement une image.\nEnvoie `none` pour supprimer. Tu as 2 minutes.",
-            color=discord.Color.blurple(),
-        )
-        prompt = await interaction.channel.send(embed=embed)
-        self.cog.start_edit_session(self.member.id, "banner", interaction.channel.id, prompt)
-
-    @discord.ui.button(label="🔐 Basculer privé/public", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="🔐 Basculer privé/public", style=discord.ButtonStyle.secondary, row=1)
     async def toggle_private_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if interaction.user.id != self.member.id:
             await interaction.response.send_message("❌ C'est pas ton profil.", ephemeral=True)
@@ -150,6 +148,11 @@ class ProfileEditView(View):
         save_json(PROFILES_FILE, profiles)
         status = "🔒 Privé" if profiles[key]["private"] else "🔓 Public"
         await interaction.channel.send(f"✅ Profil maintenant **{status}**.", delete_after=5)
+        # Update live profile message if present
+        try:
+            await self.cog._update_profile_message(self.member.id)
+        except Exception:
+            pass
 
 
 # ──────────────────────────────────────────────
@@ -161,6 +164,8 @@ class ProfileManager(commands.Cog):
         self.bot = bot
         # { member_id: {"field": str, "channel_id": int, "prompt": Message} }
         self._edit_sessions: dict[int, dict] = {}
+        # track last profile message sent per member for live updates
+        self._profile_messages: dict[int, dict] = {}
 
     def start_edit_session(self, member_id: int, field: str, channel_id: int, prompt: discord.Message) -> None:
         self._edit_sessions[member_id] = {"field": field, "channel_id": channel_id, "prompt": prompt}
@@ -215,6 +220,10 @@ class ProfileManager(commands.Cog):
             await prompt.delete()
             self.end_edit_session(message.author.id)
             await message.channel.send("✅ Image mise à jour !", delete_after=5)
+            try:
+                await self._update_profile_message(message.author.id)
+            except Exception:
+                pass
 
         elif field == "bio_color":
             updated = []
@@ -239,6 +248,10 @@ class ProfileManager(commands.Cog):
                 await prompt.delete()
                 self.end_edit_session(message.author.id)
                 await message.channel.send(f"✅ Mis à jour : {', '.join(updated)}.", delete_after=5)
+                try:
+                    await self._update_profile_message(message.author.id)
+                except Exception:
+                    pass
             else:
                 await message.channel.send("⚠️ Format non reconnu. Utilise `bio: ...` et/ou `couleur: RRGGBB`.", delete_after=8)
 
@@ -248,7 +261,7 @@ class ProfileManager(commands.Cog):
 
     @commands.command(name="profil")
     async def profil(self, ctx: commands.Context, member: Optional[discord.Member] = None) -> None:
-        """Affiche le profil d'un membre (toi-même si aucun argument)."""
+        """Affiche le profil d'un membre (toi-même si aucun argument). Ne propose pas d'édition — utilise `d!cprofil` pour modifier."""
         if not ctx.guild:
             await ctx.reply("⚠️ Cette commande fonctionne uniquement sur le serveur.", delete_after=5)
             return
@@ -268,21 +281,57 @@ class ProfileManager(commands.Cog):
             return
 
         embed = _profile_embed(target, profile)
-        view = ProfileEditView(self, target) if target.id == ctx.author.id else None
-        await ctx.send(embed=embed, view=view)
+        # d!profil affiche seulement le profil. Pour éditer, utiliser d!cprofil.
+        await ctx.send(embed=embed)
+
+    @commands.command(name="cprofil")
+    async def cprofil(self, ctx: commands.Context) -> None:
+        """Ouvre l'interface d'édition de ton profil (boutons)."""
+        if not ctx.guild:
+            await ctx.reply("⚠️ Cette commande fonctionne uniquement sur le serveur.", delete_after=5)
+            return
+
+        target = ctx.author
+        profiles = load_json(PROFILES_FILE)
+        key = str(target.id)
+        if key not in profiles:
+            profiles[key] = _default_profile(target)
+            save_json(PROFILES_FILE, profiles)
+
+        profile = profiles[key]
+        embed = _profile_embed(target, profile)
+        view = ProfileEditView(self, target)
+        msg = await ctx.send(embed=embed, view=view)
+        # store message for live updates
+        self._profile_messages[target.id] = {"channel_id": msg.channel.id, "message_id": msg.id}
 
     # ──────────────────────────────────────────────
     # d!divinfo
     # ──────────────────────────────────────────────
 
     @commands.command(name="divinfo")
-    async def divinfo(self, ctx: commands.Context, division_num: str) -> None:
+    async def divinfo(self, ctx: commands.Context, division_num: Optional[str] = None) -> None:
         """Affiche les informations d'une division. Exemple : `d!divinfo 1`"""
         if not ctx.guild:
             await ctx.reply("⚠️ Cette commande fonctionne uniquement sur le serveur.", delete_after=5)
             return
 
-        division_name = f"Division {division_num}"
+        # determine division name
+        if division_num is None:
+            member_div = get_division_by_member(ctx.author)
+            if not member_div:
+                await ctx.reply("❗ Tu n'appartiens à aucune division. Précise une division : `d!divinfo 1`.", delete_after=8)
+                return
+            division_name = member_div[0]
+        else:
+            # accept either a number or full name
+            if division_num.isdigit():
+                division_name = f"Division {division_num}"
+            elif division_num.lower().startswith("division"):
+                division_name = division_num.title()
+            else:
+                division_name = f"Division {division_num}"
+
         if division_name not in DIVISIONS:
             available = ", ".join(DIVISIONS.keys())
             await ctx.reply(f"❌ Division introuvable. Disponibles : {available}", delete_after=8)
@@ -318,6 +367,27 @@ class ProfileManager(commands.Cog):
         embed.add_field(name="👥 Membres", value=f"{member_count}/8", inline=True)
         embed.add_field(name="🏷️ Rôle", value=role.mention, inline=True)
 
+        # load members mapping to find ranks
+        from .utils import load_division_config
+        members_map = load_json(MEMBERS_FILE)
+
+        # captain
+        captain_mention = "Aucun"
+        cap_role = ctx.guild.get_role(DIVISION_CAPTAIN_ROLE_ID)
+        if cap_role:
+            for m in cap_role.members:
+                if f"{m.id}_{division_name}" in members_map:
+                    captain_mention = m.mention
+                    break
+
+        # vice & lieutenant via helper
+        lieutenant = get_rank_holder(ctx.guild, division_name, 1)
+        vice = get_rank_holder(ctx.guild, division_name, 2)
+
+        embed.add_field(name="👑 Capitaine", value=captain_mention, inline=True)
+        embed.add_field(name="🤝 Vice-capitaine", value=(vice.mention if vice else "Aucun"), inline=True)
+        embed.add_field(name="🛡️ Lieutenant", value=(lieutenant.mention if lieutenant else "Aucun"), inline=True)
+
         if config.get("min_age"):
             embed.add_field(name="📅 Âge minimum", value=f"{config['min_age']} ans", inline=True)
 
@@ -325,13 +395,50 @@ class ProfileManager(commands.Cog):
             embed.add_field(name="📋 Règlement", value=config["rules"][:1024], inline=False)
 
         if role.members:
-            members_lines = "\n".join(f"• {m.mention}" for m in role.members[:10])
+            members_lines = "\n".join(f"• {m.display_name} ({m.mention})" for m in role.members[:10])
             if len(role.members) > 10:
                 members_lines += f"\n*… et {len(role.members) - 10} de plus*"
             embed.add_field(name="🪪 Membres", value=members_lines, inline=False)
 
+        # channels
+        chs = division_data.get("channels", {})
+        ch_lines = []
+        for k, cid in chs.items():
+            ch = ctx.guild.get_channel(cid)
+            ch_lines.append(f"**{k.title()}**: {ch.mention if ch else f'ID {cid}'}")
+        if ch_lines:
+            embed.add_field(name="🔗 Channels", value="\n".join(ch_lines), inline=False)
+
         embed.set_footer(text=division_name)
         await ctx.send(embed=embed)
+
+    # helper for live edits
+    async def _update_profile_message(self, member_id: int) -> None:
+        data = getattr(self, "_profile_messages", None)
+        if not data:
+            return
+        info = data.get(member_id)
+        if not info:
+            return
+        channel = self.bot.get_channel(info["channel_id"]) if isinstance(info, dict) else None
+        if not channel:
+            return
+        try:
+            msg = await channel.fetch_message(info["message_id"])
+        except Exception:
+            return
+        # build embed
+        guild = channel.guild
+        member = guild.get_member(member_id)
+        if not member:
+            return
+        profiles = load_json(PROFILES_FILE)
+        profile = profiles.get(str(member_id)) or _default_profile(member)
+        embed = _profile_embed(member, profile)
+        try:
+            await msg.edit(embed=embed)
+        except Exception:
+            return
 
 
 async def setup(bot: commands.Bot) -> None:
