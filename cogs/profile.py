@@ -67,15 +67,16 @@ def _profile_embed(target: discord.Member, profile: dict) -> discord.Embed:
     grade = "Membre"
     grade_role: Optional[discord.Role] = None
     if member_division:
-        if any(role.id == DIVISION_CAPTAIN_ROLE_ID for role in target.roles):
-            grade = "Capitaine"
-            grade_role = target.guild.get_role(DIVISION_CAPTAIN_ROLE_ID)
-        elif any(role.id == VICE_CAPTAIN_ROLE_ID for role in target.roles):
-            grade = "Vice-capitaine"
-            grade_role = target.guild.get_role(VICE_CAPTAIN_ROLE_ID)
-        elif any(role.id == LIEUTENANT_ROLE_ID for role in target.roles):
-            grade = "Lieutenant"
-            grade_role = target.guild.get_role(LIEUTENANT_ROLE_ID)
+        grade_role_map = [
+            (DIVISION_CAPTAIN_ROLE_ID, "Capitaine"),
+            (VICE_CAPTAIN_ROLE_ID, "Vice-capitaine"),
+            (LIEUTENANT_ROLE_ID, "Lieutenant"),
+        ]
+        for role_id, label in grade_role_map:
+            if any(role.id == role_id for role in target.roles):
+                grade = label
+                grade_role = target.guild.get_role(role_id)
+                break
     embed.add_field(name="🎖️ Grade", value=grade, inline=True)
     if grade_role:
         embed.add_field(name="🔰 Role", value=grade_role.mention, inline=True)
