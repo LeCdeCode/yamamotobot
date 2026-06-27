@@ -15,7 +15,7 @@ from .utils import (
     DIVISIONS, PROFILES_FILE, DIVISION_CAPTAIN_ROLE_ID, VICE_CAPTAIN_ROLE_ID, LIEUTENANT_ROLE_ID,
     load_json, save_json, MEMBERS_FILE,
     get_division_by_member, get_member_rank, get_member_join_date, get_rank_holder,
-    count_division_members,
+    get_division_captain, count_division_members,
 )
 
 IMAGE_URL_RE = re.compile(
@@ -390,13 +390,8 @@ class ProfileManager(commands.Cog):
         members_map = load_json(MEMBERS_FILE)
 
         # captain
-        captain_mention = "Aucun"
-        cap_role = ctx.guild.get_role(DIVISION_CAPTAIN_ROLE_ID)
-        if cap_role:
-            for m in cap_role.members:
-                if f"{m.id}_{division_name}" in members_map:
-                    captain_mention = m.mention
-                    break
+        captain = get_division_captain(ctx.guild, division_name)
+        captain_mention = captain.mention if captain else "Aucun"
 
         # vice & lieutenant via helper
         lieutenant = get_rank_holder(ctx.guild, division_name, 1)

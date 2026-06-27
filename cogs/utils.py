@@ -213,15 +213,40 @@ def set_rank_cooldown(captain_id: int, division_name: str, rank_type: int) -> No
     save_json(RANK_COOLDOWNS_FILE, cooldowns)
 
 def get_rank_holder(guild: discord.Guild, division_name: str, rank_type: int) -> Optional[discord.Member]:
-    role_id = LIEUTENANT_ROLE_ID if rank_type == 1 else (VICE_CAPTAIN_ROLE_ID if rank_type == 2 else None)
-    if not role_id:
+    target_rank = "Lieutenant" if rank_type == 1 else ("Vice-Capitaine" if rank_type == 2 else None)
+    if not target_rank:
         return None
+    role_id = LIEUTENANT_ROLE_ID if rank_type == 1 else VICE_CAPTAIN_ROLE_ID
     role = guild.get_role(role_id)
     if not role:
         return None
     members = load_json(MEMBERS_FILE)
+    division_data = DIVISIONS.get(division_name)
+    division_role = guild.get_role(division_data["role_id"]) if division_data else None
+
     for member in role.members:
-        if f"{member.id}_{division_name}" in members:
+        member_data = members.get(f"{member.id}_{division_name}", {})
+        if member_data.get("rank") == target_rank:
+            return member
+
+    if division_role:
+        for member in role.members:
+            if division_role in member.roles:
+                return member
+
+    return None
+
+
+def get_division_captain(guild: discord.Guild, division_name: str) -> Optional[discord.Member]:
+    cap_role = guild.get_role(DIVISION_CAPTAIN_ROLE_ID)
+    division_data = DIVISIONS.get(division_name)
+    if not cap_role or not division_data:
+        return None
+    division_role = guild.get_role(division_data["role_id"])
+    if not division_role:
+        return None
+    for member in cap_role.members:
+        if division_role in member.roles:
             return member
     return None
 
@@ -318,9 +343,14 @@ async def send_join_announcement(guild: discord.Guild, member: discord.Member, d
     channel = guild.get_channel(data["channels"]["entrants"])
     if not channel:
         return
+    template = get_welcome_message(division_name)
+    try:
+        message = template.format(member=member.mention, division=division_name)
+    except Exception:
+        message = template
     embed = discord.Embed(
         title="🎉 Nouveau membre",
-        description=f"Bienvenue à {member.mention} dans **{division_name}** !",
+        description=message,
         color=discord.Color.green(),
     )
     embed.set_thumbnail(url=member.display_avatar.url)
@@ -337,9 +367,14 @@ async def send_leave_announcement(guild: discord.Guild, member: discord.Member, 
     channel = guild.get_channel(data["channels"]["sortants"])
     if not channel:
         return
+    template = get_goodbye_message(division_name)
+    try:
+        message = template.format(member=member.mention, division=division_name)
+    except Exception:
+        message = template
     embed = discord.Embed(
         title="👋 Membre parti",
-        description=f"{member.mention} a quitté **{division_name}**.",
+        description=message,
         color=discord.Color.red(),
     )
     embed.set_thumbnail(url=member.display_avatar.url)

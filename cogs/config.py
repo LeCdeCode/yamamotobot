@@ -36,6 +36,8 @@ STEPS = [
     ("description",  "📄 **Description**",         "Envoie une description de ta division (max 500 caractères), ou `skip`."),
     ("min_age",      "📅 **Âge minimum**",          "Envoie l'âge minimum requis (ex: `13`), ou `skip` pour aucun."),
     ("rules",        "📋 **Règlement interne**",    "Envoie le règlement de ta division (max 1000 caractères), ou `skip`."),
+    ("welcome_message", "🎉 **Message de bienvenue**", "Envoie le message de bienvenue pour le salon entrants. Utilise {member} pour mentionner le membre et {division} pour le nom de la division."),
+    ("goodbye_message", "👋 **Message d'au revoir**", "Envoie le message de départ pour le salon sortants. Utilise {member} pour mentionner le membre et {division} pour le nom de la division."),
     ("profile_url",  "🖼️ **Image de profil (PP)**", "Envoie un lien d'image/GIF ou attache directement une image, ou `skip`."),
     ("banner_url",   "🎨 **Bannière**",              "Envoie un lien d'image/GIF ou attache directement une image, ou `skip`."),
     ("role_color",   "🔴 **Couleur du rôle**",      "Envoie une couleur hex (ex: `FF5733`), ou `skip`."),
@@ -72,6 +74,8 @@ def _config_embed(step_index: int, config: dict, division_name: str) -> discord.
         "description":  "Description",
         "min_age":      "Âge minimum",
         "rules":        "Règlement",
+        "welcome_message": "Message de bienvenue",
+        "goodbye_message": "Message d'au revoir",
         "profile_url":  "Image profil",
         "banner_url":   "Bannière",
         "role_color":   "Couleur rôle",
@@ -128,13 +132,22 @@ class ConfigPreviewView(View):
         await interaction.response.defer()
         await self.session.confirm()
 
-    @discord.ui.button(label="✏️ Recommencer", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="✏️ Recommencer", style=discord.ButtonStyle.primary, row=0)
     async def restart_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if interaction.user.id != self.session.captain.id:
             await interaction.response.send_message("❌ Seul le capitaine peut modifier.", ephemeral=True)
             return
         await interaction.response.defer()
         self.session.step = 0
+        await self.session.show_step()
+
+    @discord.ui.button(label="✉️ Modifier messages", style=discord.ButtonStyle.secondary, row=1)
+    async def edit_messages_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self.session.captain.id:
+            await interaction.response.send_message("❌ Seul le capitaine peut modifier.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        self.session.step = next(i for i, (k, _, _) in enumerate(STEPS) if k == "welcome_message")
         await self.session.show_step()
 
     @discord.ui.button(label="❌ Annuler", style=discord.ButtonStyle.danger)
@@ -166,6 +179,8 @@ class ConfigSession:
             "description":  None,
             "min_age":      None,
             "rules":        None,
+            "welcome_message": None,
+            "goodbye_message": None,
             "profile_url":  None,
             "banner_url":   None,
             "role_color":   None,
@@ -279,6 +294,10 @@ class ConfigSession:
             embed.add_field(name="Âge minimum", value=f"{self.config['min_age']} ans", inline=True)
         if self.config.get("rules"):
             embed.add_field(name="Règlement", value=self.config["rules"][:1024], inline=False)
+        if self.config.get("welcome_message"):
+            embed.add_field(name="🎉 Message de bienvenue", value=self.config["welcome_message"][:1024], inline=False)
+        if self.config.get("goodbye_message"):
+            embed.add_field(name="👋 Message d'au revoir", value=self.config["goodbye_message"][:1024], inline=False)
         if self.config.get("profile_url"):
             embed.set_thumbnail(url=self.config["profile_url"])
         if self.config.get("banner_url"):
