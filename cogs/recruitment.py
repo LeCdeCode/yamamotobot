@@ -11,7 +11,7 @@ from .utils import (
     APPLICATIONS_FILE, DIVISIONS,
     DIVISION_CAPTAIN_ROLE_ID, VICE_CAPTAIN_ROLE_ID,
     load_json, save_json,
-    get_division_by_member, count_division_members,
+    get_division_by_member, count_division_members, get_division_number,
     is_member_banned, can_rejoin_after_kick,
     can_rejoin_after_leave, add_member_to_division, send_join_announcement,
 )
@@ -180,6 +180,16 @@ class ApplicationTicketView(View):
         try:
             if member:
                 await member.add_roles(role, reason=f"Candidature acceptée — {self.division_name}")
+                prefix = f"[Div {get_division_number(self.division_name)}] "
+                base = member.nick or member.name
+                if not base.startswith(prefix):
+                    new_nick = prefix + base
+                    if len(new_nick) > 32:
+                        new_nick = prefix + base[:32 - len(prefix)]
+                    try:
+                        await member.edit(nick=new_nick)
+                    except discord.Forbidden:
+                        pass
             add_member_to_division(self.member_id, self.division_name)
             if member:
                 await send_join_announcement(interaction.guild, member, self.division_name)
