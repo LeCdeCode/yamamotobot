@@ -21,9 +21,30 @@ from .utils import (
 IMAGE_URL_RE = re.compile(
     r"https?://\S+\.(png|jpg|jpeg|gif|webp)(\?[^\s]*)?"
     r"|https?://(?:media\.discordapp\.net|cdn\.discordapp\.com|i\.imgur\.com"
-    r"|media\.giphy\.com|tenor\.com|c\.tenor\.com|i\.giphy\.com)\S+",
+    r"|media\.giphy\.com|giphy\.com|tenor\.com|c\.tenor\.com|i\.giphy\.com)\S+",
     re.IGNORECASE,
 )
+
+def _normalize_image_url(url: str) -> Optional[str]:
+    if not url:
+        return None
+    url = url.strip()
+
+    giphy_match = re.search(
+        r"https?://(?:www\.)?giphy\.com/(?:gifs|embed|media|stickers)/(?:[^/]+-)?([A-Za-z0-9]+)",
+        url,
+    )
+    if giphy_match:
+        return f"https://media.giphy.com/media/{giphy_match.group(1)}/giphy.gif"
+
+    tenor_match = re.search(
+        r"https?://(?:www\.)?tenor\.com/(?:view|watch)/[^-]+-(\d+)",
+        url,
+    )
+    if tenor_match:
+        return f"https://c.tenor.com/{tenor_match.group(1)}.gif"
+
+    return url
 
 DIVISION_PROFILES_FILE = __import__("pathlib").Path(str(PROFILES_FILE).replace("member_profiles", "division_profiles"))
 
@@ -166,7 +187,42 @@ class ProfileEditView(View):
         save_json(PROFILES_FILE, profiles)
         status = "🔒 Privé" if profiles[key]["private"] else "🔓 Public"
         await interaction.channel.send(f"✅ Profil maintenant **{status}**.", delete_after=5)
-        # Update live profile message if present
+        try:
+            await self.cog._update_profile_message(self.member.id)
+        except Exception:
+            pass
+
+    @discord.ui.button(label="🧼 Réinitialiser PP", style=discord.ButtonStyle.secondary, row=2)
+    async def reset_pp_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self.member.id:
+            await interaction.response.send_message("❌ C'est pas ton profil.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        profiles = load_json(PROFILES_FILE)
+        key = str(self.member.id)
+        if key not in profiles:
+            profiles[key] = _default_profile(self.member)
+        profiles[key]["profile_picture"] = None
+        save_json(PROFILES_FILE, profiles)
+        await interaction.channel.send("✅ Image de profil réinitialisée.", delete_after=5)
+        try:
+            await self.cog._update_profile_message(self.member.id)
+        except Exception:
+            pass
+
+    @discord.ui.button(label="🚫 Retirer bannière", style=discord.ButtonStyle.secondary, row=2)
+    async def remove_banner_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self.member.id:
+            await interaction.response.send_message("❌ C'est pas ton profil.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        profiles = load_json(PROFILES_FILE)
+        key = str(self.member.id)
+        if key not in profiles:
+            profiles[key] = _default_profile(self.member)
+        profiles[key]["banner"] = None
+        save_json(PROFILES_FILE, profiles)
+        await interaction.channel.send("✅ Bannière retirée.", delete_after=5)
         try:
             await self.cog._update_profile_message(self.member.id)
         except Exception:
@@ -220,14 +276,19 @@ class ProfileManager(commands.Cog):
                 await prompt.delete()
                 self.end_edit_session(message.author.id)
                 await message.channel.send(f"✅ {field.replace('_', ' ').title()} supprimée.", delete_after=5)
+                try:
+                    await self._update_profile_message(message.author.id)
+                except Exception:
+                    pass
                 return
 
             url = None
             if message.attachments:
                 att = message.attachments[0]
-                url = att.url
+                if att.content_type and att.content_type.startswith(("image/", "video/")):
+                    url = _normalize_image_url(att.url)
             elif IMAGE_URL_RE.search(content):
-                url = IMAGE_URL_RE.search(content).group(0)
+                url = _normalize_image_url(IMAGE_URL_RE.search(content).group(0))
 
             if not url:
                 await message.channel.send("⚠️ Aucune image détectée. Réessaie.", delete_after=6)

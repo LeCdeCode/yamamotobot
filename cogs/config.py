@@ -27,9 +27,30 @@ COOLDOWN_DAYS = 7
 IMAGE_URL_RE = re.compile(
     r"https?://\S+\.(png|jpg|jpeg|gif|webp)(\?[^\s]*)?"
     r"|https?://(?:media\.discordapp\.net|cdn\.discordapp\.com|i\.imgur\.com"
-    r"|media\.giphy\.com|tenor\.com|c\.tenor\.com|i\.giphy\.com)\S+",
+    r"|media\.giphy\.com|giphy\.com|tenor\.com|c\.tenor\.com|i\.giphy\.com)\S+",
     re.IGNORECASE,
 )
+
+def _normalize_image_url(url: str) -> Optional[str]:
+    if not url:
+        return None
+    url = url.strip()
+
+    giphy_match = re.search(
+        r"https?://(?:www\.)?giphy\.com/(?:gifs|embed|media|stickers)/(?:[^/]+-)?([A-Za-z0-9]+)",
+        url,
+    )
+    if giphy_match:
+        return f"https://media.giphy.com/media/{giphy_match.group(1)}/giphy.gif"
+
+    tenor_match = re.search(
+        r"https?://(?:www\.)?tenor\.com/(?:view|watch)/[^-]+-(\d+)",
+        url,
+    )
+    if tenor_match:
+        return f"https://c.tenor.com/{tenor_match.group(1)}.gif"
+
+    return url
 
 STEPS = [
     ("custom_name",  "📝 **Nom personnalisé**",   "Envoie le nom de ta division (ex: `Shinigami Corps`), ou `skip` pour garder le nom par défaut."),
@@ -49,13 +70,13 @@ def _extract_image_url(message: discord.Message) -> Optional[str]:
     if message.attachments:
         att = message.attachments[0]
         if att.content_type and att.content_type.startswith(("image/", "video/")):
-            return att.url
+            return _normalize_image_url(att.url)
         if IMAGE_URL_RE.search(att.url):
-            return att.url
+            return _normalize_image_url(att.url)
     if message.content:
         match = IMAGE_URL_RE.search(message.content)
         if match:
-            return match.group(0)
+            return _normalize_image_url(match.group(0))
     return None
 
 
