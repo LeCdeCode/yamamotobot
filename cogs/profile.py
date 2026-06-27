@@ -12,7 +12,7 @@ from discord.ext import commands
 from discord.ui import View, Button
 
 from .utils import (
-    DIVISIONS, PROFILES_FILE, DIVISION_CAPTAIN_ROLE_ID,
+    DIVISIONS, PROFILES_FILE, DIVISION_CAPTAIN_ROLE_ID, VICE_CAPTAIN_ROLE_ID, LIEUTENANT_ROLE_ID,
     load_json, save_json, MEMBERS_FILE,
     get_division_by_member, get_member_rank, get_member_join_date, get_rank_holder,
     count_division_members,
@@ -63,6 +63,17 @@ def _profile_embed(target: discord.Member, profile: dict) -> discord.Embed:
         embed.set_image(url=profile["banner"])
 
     embed.add_field(name="🏷️ Division", value=division_name, inline=True)
+
+    grade = "Membre"
+    if member_division:
+        if any(role.id == DIVISION_CAPTAIN_ROLE_ID for role in target.roles):
+            grade = "Capitaine"
+        elif any(role.id == VICE_CAPTAIN_ROLE_ID for role in target.roles):
+            grade = "Vice-capitaine"
+        elif any(role.id == LIEUTENANT_ROLE_ID for role in target.roles):
+            grade = "Lieutenant"
+    embed.add_field(name="🎖️ Grade", value=grade, inline=True)
+
     if rank:
         embed.add_field(name="⚔️ Rang", value=rank, inline=True)
     if join_date:
@@ -399,15 +410,6 @@ class ProfileManager(commands.Cog):
             if len(role.members) > 10:
                 members_lines += f"\n*… et {len(role.members) - 10} de plus*"
             embed.add_field(name="🪪 Membres", value=members_lines, inline=False)
-
-        # channels
-        chs = division_data.get("channels", {})
-        ch_lines = []
-        for k, cid in chs.items():
-            ch = ctx.guild.get_channel(cid)
-            ch_lines.append(f"**{k.title()}**: {ch.mention if ch else f'ID {cid}'}")
-        if ch_lines:
-            embed.add_field(name="🔗 Channels", value="\n".join(ch_lines), inline=False)
 
         embed.set_footer(text=division_name)
         await ctx.send(embed=embed)
