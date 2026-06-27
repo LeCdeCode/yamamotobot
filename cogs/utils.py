@@ -34,7 +34,7 @@ DIVISIONS: dict[str, dict] = {
         },
     },
     "Division 6": {
-        "role_id": 1520180291061415957,
+        "role_id": 1520173789957062787,
         "channels": {
             "main":     1520185465817272391,
             "annonces": 1520185555516915913,
@@ -44,7 +44,7 @@ DIVISIONS: dict[str, dict] = {
         },
     },
     "Division 10": {
-        "role_id": 1520199862216425534,
+        "role_id": 1520173789957062787,
         "channels": {
             "main":     1520194245997363341,
             "annonces": 1520199186916573335,
@@ -67,7 +67,7 @@ DIVISIONS: dict[str, dict] = {
 
 LIEUTENANT_ROLE_ID      = 1520240253628055572
 VICE_CAPTAIN_ROLE_ID    = 1520235446712406078
-DIVISION_CAPTAIN_ROLE_ID= 1520199922752819381
+DIVISION_CAPTAIN_ROLE_ID= 1520180582120820856
 
 # ──────────────────────────────────────────────
 # JSON helpers
